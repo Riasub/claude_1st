@@ -151,7 +151,7 @@ def test_cli_build_no_ai_then_render(visit_dir, monkeypatch):
     draft = visit_dir / "draft"
     prompt = (draft / "prompt.md").read_text(encoding="utf-8")
     assert "아인슈페너" in prompt and "[사진 3]" in prompt
-    assert sorted(p.name for p in (draft / "photos").iterdir()) == ["01.jpg", "02.jpg", "03.jpg"]
+    assert sorted(p.name for p in (draft / "photos").glob("*.jpg")) == ["01.jpg", "02.jpg", "03.jpg"]
 
     (draft / "post.json").write_text(json.dumps({
         "title": "성수동 카페 온새", "alt_titles": [], "tags": ["성수동카페"], "check": [],
@@ -162,3 +162,61 @@ def test_cli_build_no_ai_then_render(visit_dir, monkeypatch):
     assert "[사진 1]\n외관" in txt and "[사진 3]" in txt
     assert (draft / "tags.txt").read_text(encoding="utf-8") == "#성수동카페\n"
     assert 'src="photos/01.jpg"' in (draft / "preview.html").read_text(encoding="utf-8")
+
+
+def test_parse_menus():
+    from blogdraft.notion import parse_menus
+
+    assert parse_menus("아인슈페너 6500 / 크로플 7,000원\n물") == [
+        {"name": "아인슈페너", "price": 6500},
+        {"name": "크로플", "price": 7000},
+        {"name": "물"},
+    ]
+    assert parse_menus("") == []
+
+
+def test_import_notion_build_render_writes_notion_markdown(tmp_path, monkeypatch):
+    from blogdraft import notion
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    src = tmp_path / "dl"
+    src.mkdir()
+    make_photo(src / "IMG 1.jpg", taken="2026:11:22 15:00:00")
+    make_photo(src / "IMG 2.jpg", taken="2026:11:22 14:00:00")  # 더 이른 시간이지만 노션 순서가 우선
+    (src / "broken.jpg").write_bytes(b"not an image")
+    spec = {
+        "page_url": "https://www.notion.so/abc123def4567890abcdef1234567890",
+        "name": "온새", "date": "2026-11-22", "type": "카페", "area": "성수동",
+        "menus": "아인슈페너 6500", "review": "크림이 진했어요 <b>굿</b>", "sponsored": True,
+        "photos": [
+            {"path": str(src / "IMG 1.jpg"), "ref": "notion-file-block://a?name=1.jpg"},
+            {"path": str(src / "broken.jpg"), "ref": "notion-file-block://b"},
+            {"path": str(src / "IMG 2.jpg"), "ref": "notion-file-block://c?name=2.jpg"},
+        ],
+    }
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+    root = tmp_path / "visits"
+    assert cli.main(["import-notion", str(spec_path), "--root", str(root)]) == 0
+    folder = next(root.iterdir())
+    assert folder.name.endswith("34567890")
+    visit = load_visit(folder)
+    assert visit["menus"] == [{"name": "아인슈페너", "price": 6500}]
+    assert visit["place"]["naver_search"] is False
+
+    assert cli.main(["build", str(folder)]) == 0  # 깨진 사진은 건너뜀
+    draft = folder / "draft"
+    (draft / "post.json").write_text(json.dumps({
+        "title": "성수동 카페 온새", "alt_titles": ["다른 제목"], "tags": ["성수동카페"], "check": ["메뉴 확인"],
+        "blocks": [{"kind": "text", "text": "- 목록처럼 보이는 문장 <script>", "photo": 0},
+                   {"kind": "photo", "text": "외관", "photo": 2}],
+    }, ensure_ascii=False), encoding="utf-8")
+    assert cli.main(["render", str(folder)]) == 0
+    md = (draft / "notion.md").read_text(encoding="utf-8")
+    assert notion.DRAFT_HEADING in md
+    assert '<image source="notion-file-block://c?name=2.jpg">사진 2 · 외관</image>' in md
+    assert '<image source="notion-file-block://a?name=1.jpg">사진 1</image>' in md
+    assert "notion-file-block://b" not in md
+    assert "\\- 목록처럼 보이는 문장 &lt;script&gt;" in md
+    assert "제공받아 작성한 후기입니다" in md and "| 메뉴 | 아인슈페너 6,500원 |" in md
+    assert "```text\n#성수동카페\n```" in md

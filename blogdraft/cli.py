@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import naver, photos as photo_mod, render, writer
+from . import naver, notion, photos as photo_mod, render, writer
 from .visit import DRAFT_DIR, PHOTO_DIR, VisitError, create_visit, load_visit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -75,8 +75,11 @@ def cmd_build(args) -> int:
     draft.mkdir(exist_ok=True)
 
     place_info = lookup_place(folder, visit, args.refresh_place)
-    photos = photo_mod.prepare_photos(folder / PHOTO_DIR, draft / "photos", visit["photos"])
+    skipped: list[str] = []
+    photos = photo_mod.prepare_photos(folder / PHOTO_DIR, draft / "photos", visit["photos"], skipped)
     print(f"· 사진 {len(photos)}장 정리 완료 (위치정보 제거, 크기 조정)")
+    for reason in skipped:
+        print(f"· 건너뛴 사진: {reason}")
 
     system = writer.system_prompt(writer.load_style(REPO_ROOT))
     use_ai = not args.no_ai
@@ -96,7 +99,14 @@ def cmd_build(args) -> int:
     print("· Claude가 초안을 쓰는 중... (1~2분 걸릴 수 있어요)")
     content = writer.user_content(visit, place_info, photos, with_images=not args.no_images)
     post = writer.normalize_post(writer.write_with_claude(system, content), len(photos))
-    return _finish(draft, post, visit, place_info)
+    return _finish(folder, post, visit, place_info)
+
+
+def cmd_import_notion(args) -> int:
+    spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+    folder = notion.import_visit(spec, Path(args.root))
+    print(folder)
+    return 0
 
 
 def cmd_render(args) -> int:
@@ -111,11 +121,17 @@ def cmd_render(args) -> int:
     place_info = (json.loads(cache.read_text(encoding="utf-8")) or None) if cache.is_file() else None
     photo_count = len(list((draft / "photos").glob("*.jpg")))
     post = writer.normalize_post(json.loads(post_path.read_text(encoding="utf-8")), photo_count)
-    return _finish(draft, post, visit, place_info)
+    return _finish(folder, post, visit, place_info)
 
 
-def _finish(draft: Path, post: dict, visit: dict, place_info) -> int:
+def _finish(folder: Path, post: dict, visit: dict, place_info) -> int:
+    draft = folder / DRAFT_DIR
     render.write_outputs(draft, post, visit, place_info)
+    if (folder / notion.NOTION_FILE).is_file():
+        refs = notion.photo_refs_for(folder, draft / "photos")
+        md = notion.notion_markdown(post, visit, place_info, refs, dt.date.today().isoformat())
+        (draft / "notion.md").write_text(md, encoding="utf-8")
+        print(f"노션용 초안: {draft / 'notion.md'}")
     print(f"초안 완성: {draft / 'preview.html'}")
     print("  브라우저로 열어 확인하고, 제목/본문/태그 복사 버튼으로 블로그에 붙여 넣으세요.")
     if post["check"]:
@@ -142,6 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-images", action="store_true", help="사진을 Claude에게 보내지 않기 (비용 절약)")
     p.add_argument("--refresh-place", action="store_true", help="네이버 가게 정보 다시 검색")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("import-notion", help="노션 페이지 정보(JSON)로 방문 폴더 만들기")
+    p.add_argument("spec", help="노션 페이지 정보 JSON 파일 (형식은 blogdraft/notion.py 참고)")
+    p.add_argument("--root", default=str(REPO_ROOT / "visits"), help="방문 폴더를 만들 위치")
+    p.set_defaults(func=cmd_import_notion)
 
     p = sub.add_parser("render", help="post.json을 고친 뒤 미리보기 다시 만들기")
     p.add_argument("folder", help="방문 폴더")

@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageOps
+
+try:  # 아이폰 HEIC 사진 지원 (설치되어 있을 때만)
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:  # pragma: no cover
+    pass
 
 PHOTO_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 BLOG_MAX_EDGE = 1600   # 블로그 업로드용
@@ -50,7 +58,7 @@ def _open_upright(path: Path) -> Image.Image:
         im = Image.open(path)
     except Exception as e:  # HEIC 등 지원 안 되는 형식
         raise ValueError(
-            f"{path.name}을(를) 열 수 없어요. 아이폰 HEIC 사진이면 JPG로 내보내서 넣어 주세요. ({e})"
+            f"{path.name}을(를) 열 수 없어요. JPG로 바꿔서 다시 넣어 주세요. ({e})"
         ) from e
     im = ImageOps.exif_transpose(im)
     if im.mode not in ("RGB", "L"):
@@ -64,20 +72,33 @@ def _resized(im: Image.Image, max_edge: int) -> Image.Image:
     return im
 
 
-def prepare_photos(photo_dir: Path, out_dir: Path, captions: dict[str, str]) -> list[Photo]:
+def prepare_photos(
+    photo_dir: Path, out_dir: Path, captions: dict[str, str], skipped: list[str] | None = None
+) -> list[Photo]:
     """블로그용 사진을 01.jpg, 02.jpg ... 로 저장한다.
 
     새로 저장할 때 EXIF를 넣지 않으므로 GPS 위치, 기기 정보가 모두 빠진다.
+    skipped 리스트를 넘기면 열 수 없는 사진은 건너뛰고 그 이유를 거기에 담는다 (없으면 오류).
+    순서와 원본 파일명은 out_dir/photos.json 에도 기록한다.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     for old in out_dir.glob("*.jpg"):
         old.unlink()
     photos: list[Photo] = []
-    for i, src in enumerate(find_photos(photo_dir, captions), start=1):
-        im = _open_upright(src)
-        out = out_dir / f"{i:02d}.jpg"
+    for src in find_photos(photo_dir, captions):
+        try:
+            im = _open_upright(src)
+        except ValueError as e:
+            if skipped is None:
+                raise
+            skipped.append(str(e))
+            continue
+        index = len(photos) + 1
+        out = out_dir / f"{index:02d}.jpg"
         _resized(im, BLOG_MAX_EDGE).save(out, "JPEG", quality=90, optimize=True)
-        photos.append(Photo(index=i, source=src, output=out, caption=captions.get(src.name, "")))
+        photos.append(Photo(index=index, source=src, output=out, caption=captions.get(src.name, "")))
+    manifest = [{"index": p.index, "source": p.source.name, "caption": p.caption} for p in photos]
+    (out_dir / "photos.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return photos
 
 
