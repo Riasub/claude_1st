@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import naver, notion, photos as photo_mod, render, writer
+from . import naver, notion, paste, photos as photo_mod, render, writer
 from .visit import DRAFT_DIR, PHOTO_DIR, VisitError, create_visit, load_visit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -127,6 +127,7 @@ def cmd_render(args) -> int:
 def _finish(folder: Path, post: dict, visit: dict, place_info) -> int:
     draft = folder / DRAFT_DIR
     render.write_outputs(draft, post, visit, place_info)
+    print(f"붙여넣기 페이지: {paste.write_paste(draft, post, visit, place_info)}")
     if (folder / notion.NOTION_FILE).is_file():
         refs = notion.photo_refs_for(folder, draft / "photos")
         md = notion.notion_markdown(post, visit, place_info, refs, dt.date.today().isoformat())

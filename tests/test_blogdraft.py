@@ -233,3 +233,21 @@ def test_place_marker_and_region_after_store_info(visit_dir):
     assert "장소&#x27; 버튼" in render.preview_html(post, visit, None)
     # 주소가 있으면 지역 줄은 빠짐
     assert "지역 :" not in render.post_text(post, visit, {"road_address": "서울 성동구 1"})
+
+
+def test_paste_page_embeds_photos_in_order(visit_dir, tmp_path):
+    from blogdraft import paste
+
+    visit = load_visit(visit_dir)
+    draft = tmp_path / "draft"
+    photos.prepare_photos(visit_dir / "photos", draft / "photos", {})
+    post = writer.normalize_post({"title": "[성수동] 온새 후기", "alt_titles": [], "tags": ["성수카페"], "check": ["확인 <1>"],
+                                  "blocks": [{"kind": "heading", "text": "분위기", "photo": 0},
+                                             {"kind": "photo", "text": "외관", "photo": 2}]}, 3)
+    page = paste.write_paste(draft, post, visit, None).read_text(encoding="utf-8")
+    assert page.startswith("<title>")
+    assert "<html" not in page and "<body" not in page
+    assert page.count('src="data:image/jpeg;base64,') == 3
+    body = page[page.index('<div id="article">'):]
+    assert body.index("▶ 분위기") < body.index('alt="사진 2"') < body.index('alt="사진 1"')
+    assert "[📍 장소: " in body and "확인 &lt;1&gt;" in page
