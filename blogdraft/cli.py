@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import naver, notion, paste, photos as photo_mod, render, writer
+from . import naver, notion, paste, photos as photo_mod, placeinfo, render, writer
 from .visit import DRAFT_DIR, PHOTO_DIR, VisitError, create_visit, load_visit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -38,8 +38,7 @@ def lookup_place(folder: Path, visit: dict, refresh: bool) -> dict | None:
     if cache.is_file() and not refresh:
         return json.loads(cache.read_text(encoding="utf-8")) or None
     if naver.credentials() is None:
-        print("· 네이버 API 키가 없어 가게 정보 검색을 건너뜁니다.")
-        return None
+        return lookup_naver_place(cache, place)
     query = place.get("search_query") or " ".join(x for x in (place.get("area", ""), place["name"]) if x)
     try:
         results = naver.search_place(query)
@@ -56,6 +55,31 @@ def lookup_place(folder: Path, visit: dict, refresh: bool) -> dict | None:
         names = ", ".join(r["name"] for r in results) or "결과 없음"
         print(f"· 이름이 맞는 가게를 못 찾았어요 ({names}). search_query를 적어 보세요.")
     return match
+
+
+def lookup_naver_place(cache: Path, place: dict) -> dict | None:
+    """API 키가 없을 때: 네이버 플레이스 페이지에서 주소·전화·메뉴판을 읽는다."""
+    try:
+        info = placeinfo.lookup(place.get("search_query") or place["name"], "" if place.get("search_query") else place.get("area", ""))
+    except placeinfo.PlaceError as e:
+        print(f"· {e} - 가게 정보 없이 계속합니다.")
+        return None
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"· 네이버 플레이스: {info['name']} / {info['road_address'] or info['address']} / 메뉴 {len(info['menus'])}개")
+    return info
+
+
+def cmd_place(args) -> int:
+    try:
+        info = placeinfo.lookup(args.name, args.area)
+    except placeinfo.PlaceError as e:
+        print(f"오류: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(info, ensure_ascii=False, indent=2) if args.json else
+          f"{info['name']} ({info['category']})\n{info['road_address'] or info['address']}\n"
+          f"{info['telephone']}\n{info['link']}\n{placeinfo.menu_text(info)}")
+    return 0
 
 
 def cmd_new(args) -> int:
@@ -164,6 +188,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("spec", help="방문 정보 JSON 파일 (형식은 blogdraft/notion.py의 import_visit 참고)")
     p.add_argument("--root", default=str(REPO_ROOT / "visits"), help="방문 폴더를 만들 위치")
     p.set_defaults(func=cmd_import)
+
+    p = sub.add_parser("place", help="네이버 플레이스에서 가게 주소·전화·메뉴판 조회")
+    p.add_argument("name", help="가게 이름")
+    p.add_argument("--area", default="", help="동네 (예: 탕정)")
+    p.add_argument("--json", action="store_true", help="JSON으로 출력")
+    p.set_defaults(func=cmd_place)
 
     p = sub.add_parser("render", help="post.json을 고친 뒤 미리보기 다시 만들기")
     p.add_argument("folder", help="방문 폴더")

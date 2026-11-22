@@ -8,6 +8,8 @@
 - `blogdraft/visit.py` 방문 기록(`visit.yaml`) 읽기 (빈 칸은 `prune`으로 제거)
 - `blogdraft/photos.py` 사진 정리: 회전 보정, 1600px로 축소, EXIF(GPS 포함) 제거, 순서 정하기, HEIC 지원
 - `blogdraft/naver.py` 네이버 지역 검색 API (선택, 현재 미사용: 새 신청 목록에 검색 API가 없음)
+- `blogdraft/placeinfo.py` 네이버 플레이스 페이지에서 주소·전화·분류·메뉴판 읽기 (API 키 없을 때 기본). 결과는 `draft/place.json`
+- `blogdraft/paste.py` 붙여넣기 페이지(`draft/paste.html`): 사진을 넣은 본문을 한 번에 복사
 - `blogdraft/writer.py` 지시문(`RULES` + `style.md`), Claude API 호출, 결과 정리(`normalize_post`)
 - `blogdraft/render.py` `post.txt` / `tags.txt` / `preview.html`, 협찬 표시, 가게 정보 칸
 - `blogdraft/notion.py` 방문 정보 JSON → 방문 폴더(`import`), 노션용 초안(`draft/notion.md`)
@@ -17,6 +19,9 @@
 사용자가 사진을 첨부하고 가게 이름, 메뉴·가격, 느낀 점 등을 적은 뒤 "초안 써줘"라고 하면 아래 순서로 처리한다.
 첨부한 사진은 메시지에 `[Image: source: <경로>]` 형태로 로컬 경로가 붙어 온다.
 
+0. **메뉴판 확인:** `python -m blogdraft place "<가게 이름>" --area <동네>`로 네이버 메뉴판을 본다.
+   사용자가 먹은 메뉴를 메뉴판의 정확한 이름(+가격)으로 `menus`에 적는다. 어느 메뉴인지 애매하면 사용자 표현 그대로 두고 확인할 점에 남긴다.
+   다른 가게가 나오면 JSON에 `"search_query": "가게 이름 동네"`를 넣는다.
 1. **방문 폴더 만들기:** 메시지 내용으로 아래 JSON을 임시 파일(스크래치 폴더)에 쓰고 `python -m blogdraft import <json>` 실행. 마지막 줄이 방문 폴더다.
    ```json
    {"name": "가게 이름", "date": "YYYY-MM-DD", "type": "카페", "area": "동네", "address": "",
@@ -55,3 +60,4 @@
 - `visits/`는 개인 사진과 기록이라 `.gitignore`에 들어 있다. 이 저장소는 공개 저장소이므로 사용자가 명시적으로 원할 때만 커밋한다.
 - 비밀 값은 `.env`(로컬) 또는 클라우드 환경의 네트워크 시크릿에만 둔다. 코드나 커밋에 넣지 않는다.
 - 이 클라우드 환경은 `api.notion.com` 직접 접속이 막혀 있다. 노션 작업은 노션 커넥터 도구로만 한다.
+- 네이버 플레이스 조회는 공식 API가 아니다. 가게 하나당 한 번만 조회하고(`draft/place.json`에 저장됨), 실패하면 사용자에게 메뉴판 캡처를 부탁한다.

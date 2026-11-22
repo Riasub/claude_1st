@@ -46,6 +46,8 @@ def info_lines(visit: dict[str, Any], place_info: dict[str, Any] | None) -> list
     ]
     if menus:
         rows.append(("메뉴", ", ".join(menus)))
+    if found.get("link"):
+        rows.append(("네이버 지도", found["link"]))
     return [(k, str(val)) for k, val in rows if str(val).strip()]
 
 

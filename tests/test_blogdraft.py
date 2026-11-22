@@ -21,6 +21,17 @@ def make_photo(path: Path, size=(3000, 2000), taken="2026:11:22 13:00:00", gps=T
     im.save(path, "JPEG", exif=exif)
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """테스트에서는 네이버에 접속하지 않는다."""
+    from blogdraft import placeinfo
+
+    def blocked(*args, **kwargs):
+        raise placeinfo.PlaceError("테스트에서는 네트워크를 쓰지 않아요.")
+
+    monkeypatch.setattr(placeinfo, "_get", blocked)
+
+
 @pytest.fixture
 def visit_dir(tmp_path):
     folder = create_visit(tmp_path, '카페 "온새"')
@@ -188,6 +199,7 @@ def test_import_notion_build_render_writes_notion_markdown(tmp_path, monkeypatch
         "page_url": "https://www.notion.so/abc123def4567890abcdef1234567890",
         "name": "온새", "date": "2026-11-22", "type": "카페", "area": "성수동",
         "menus": "아인슈페너 6500", "review": "크림이 진했어요 <b>굿</b>", "sponsored": True,
+        "naver_search": False,
         "photos": [
             {"path": str(src / "IMG 1.jpg"), "ref": "notion-file-block://a?name=1.jpg"},
             {"path": str(src / "broken.jpg"), "ref": "notion-file-block://b"},
@@ -251,3 +263,46 @@ def test_paste_page_embeds_photos_in_order(visit_dir, tmp_path):
     body = page[page.index('<div id="article">'):]
     assert body.index("▶ 분위기") < body.index('alt="사진 2"') < body.index('alt="사진 1"')
     assert "[📍 장소: " in body and "확인 &lt;1&gt;" in page
+
+
+PLACE_PAGE = """<script>window.__APOLLO_STATE__ = {
+"PlaceDetailBase:1": {"__typename": "PlaceDetailBase", "name": "타코의밤", "category": "요리주점",
+  "roadAddress": "충남 아산시 탕정면 매곡한들5길 6-4 103호", "address": "충남 아산시 탕정면 매곡리 1415", "phone": "041-424-4565"},
+"PlaceMenuItem:a": {"__typename": "PlaceMenuItem", "name": "가쓰오 수제 타코야끼", "price": {"displayText": "7,000~24,000원"}, "description": "큼지막한 문어"},
+"PlaceMenuItem:b": {"__typename": "PlaceMenuItem", "name": "[매콤짭짤] 문어 뽈뽀", "price": {"displayText": "15,900원"}, "description": null},
+"c1": {"__typename": "PlaceMenuCategory", "kind": "recommend", "itemIds": ["b"]},
+"c2": {"__typename": "PlaceMenuCategory", "kind": "normal", "itemIds": ["a", "b"]}
+};
+</script>"""
+
+
+def test_place_parse_and_lookup(monkeypatch):
+    from blogdraft import placeinfo
+
+    search = '..."id":"1390149","name":"순환5"...,"id":"2031983709","name":"타코의밤",...'
+    assert placeinfo.find_place_id("타코의 밤", "탕정", html_text=search) == "2031983709"
+    assert placeinfo.find_place_id("없는집", html_text=search) is None
+
+    info = placeinfo.parse_place(PLACE_PAGE, "2031983709")
+    assert info["telephone"] == "041-424-4565" and info["category"] == "요리주점"
+    assert [m["name"] for m in info["menus"]] == ["가쓰오 수제 타코야끼", "[매콤짭짤] 문어 뽈뽀"]
+    assert info["menus"][1]["price"] == "15,900원"
+    assert info["link"] == "https://map.naver.com/p/entry/place/2031983709"
+
+    pages = {"search": search, "place": PLACE_PAGE}
+    monkeypatch.setattr(placeinfo, "_get", lambda url, **kw: pages["place" if "m.place" in url else "search"])
+    assert placeinfo.lookup("타코의밤", "탕정")["name"] == "타코의밤"
+    with pytest.raises(placeinfo.PlaceError):
+        placeinfo.parse_place("<html>no data</html>", "1")
+
+
+def test_official_menu_reaches_prompt_and_store_info(visit_dir):
+    from blogdraft import placeinfo
+
+    visit = load_visit(visit_dir)
+    info = placeinfo.parse_place(PLACE_PAGE, "2031983709")
+    facts = writer.facts_text(visit, info)
+    assert "[매콤짭짤] 문어 뽈뽀" in facts and "15,900원" in facts
+    rows = dict(render.info_lines(visit, info))
+    assert rows["전화"] == "041-424-4565"
+    assert rows["네이버 지도"].endswith("/2031983709")
