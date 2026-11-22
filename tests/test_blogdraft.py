@@ -220,3 +220,16 @@ def test_import_notion_build_render_writes_notion_markdown(tmp_path, monkeypatch
     assert "\\- 목록처럼 보이는 문장 &lt;script&gt;" in md
     assert "제공받아 작성한 후기입니다" in md and "| 메뉴 | 아인슈페너 6,500원 |" in md
     assert "```text\n#성수동카페\n```" in md
+
+
+def test_place_marker_and_region_after_store_info(visit_dir):
+    visit = load_visit(visit_dir)
+    post = writer.normalize_post({"title": "[성수동] 카페 \"온새\" 후기", "alt_titles": [], "tags": [], "check": [],
+                                  "blocks": [{"kind": "text", "text": "본문", "photo": 0}]}, 0)
+    txt = render.post_text(post, visit, None)
+    assert "지역 : 성수동" in txt
+    assert txt.rstrip().endswith('[📍 장소: 카페 "온새"]')
+    assert txt.index("📍 가게 정보") < txt.index("[📍 장소:")
+    assert "장소&#x27; 버튼" in render.preview_html(post, visit, None)
+    # 주소가 있으면 지역 줄은 빠짐
+    assert "지역 :" not in render.post_text(post, visit, {"road_address": "서울 성동구 1"})

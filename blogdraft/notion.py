@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .render import disclosure, info_lines, post_text, tags_text
+from .render import PLACE_HELP, disclosure, info_lines, place_marker, post_text, tags_text
 from .visit import PHOTO_DIR, VISIT_FILE, VisitError, slugify
 
 NOTION_FILE = "notion.json"
@@ -142,6 +142,8 @@ def notion_markdown(post: dict[str, Any], visit, place_info, photo_refs: dict[in
     info = info_lines(visit, place_info)
     if info:
         out += ["| 가게 정보 | |", "| --- | --- |"] + [f"| {_cell(k)} | {_cell(v)} |" for k, v in info] + [""]
+    if marker := place_marker(visit):
+        out += [f'<callout icon="📍" color="green_bg">\n{_text(marker)}\n\n{_text(PLACE_HELP)}\n</callout>', ""]
     return "\n".join(out).rstrip() + "\n"
 
 

@@ -32,6 +32,7 @@ def info_lines(visit: dict[str, Any], place_info: dict[str, Any] | None) -> list
     rows = [
         ("상호", place.get("name", "")),
         ("주소", place.get("address") or found.get("road_address") or found.get("address", "")),
+        ("지역", "" if place.get("address") or found else place.get("area", "")),
         ("전화", found.get("telephone", "")),
         ("영업시간", place.get("hours", "")),
         ("주차", v.get("parking", "")),
@@ -48,8 +49,17 @@ def info_lines(visit: dict[str, Any], place_info: dict[str, Any] | None) -> list
     return [(k, str(val)) for k, val in rows if str(val).strip()]
 
 
+def place_marker(visit: dict[str, Any]) -> str:
+    """글 맨 끝, 네이버 에디터의 '장소' 버튼으로 지도 카드를 넣을 자리."""
+    name = visit.get("place", {}).get("name", "")
+    return f"[📍 장소: {name}]" if name else ""
+
+
+PLACE_HELP = "네이버 블로그 에디터의 '장소' 버튼으로 가게를 검색해 이 자리에 지도 카드를 넣으세요."
+
+
 def post_text(post: dict[str, Any], visit, place_info) -> str:
-    parts = [post["title"], ""]
+    parts: list[str] = []  # 제목은 네이버 에디터의 제목 칸에 따로 넣으므로 본문에서 뺀다
     if d := disclosure(visit):
         parts += [d, ""]
     for b in post["blocks"]:
@@ -65,6 +75,8 @@ def post_text(post: dict[str, Any], visit, place_info) -> str:
     info = info_lines(visit, place_info)
     if info:
         parts += [DIVIDER, "📍 가게 정보"] + [f"{k} : {val}" for k, val in info] + [DIVIDER, ""]
+    if marker := place_marker(visit):
+        parts += [marker, ""]
     return "\n".join(parts).rstrip() + "\n"
 
 
@@ -95,6 +107,8 @@ def preview_html(post: dict[str, Any], visit, place_info) -> str:
     if info:
         rows = "".join(f"<tr><th>{_e(k)}</th><td>{_e(v)}</td></tr>" for k, v in info)
         body.append(f'<div class="info"><h3>📍 가게 정보</h3><table>{rows}</table></div>')
+    if marker := place_marker(visit):
+        body.append(f'<p class="place"><strong>{_e(marker)}</strong><br>{_e(PLACE_HELP)}</p>')
 
     checks = "".join(f"<li>{_e(c)}</li>" for c in post["check"])
     check_box = (
@@ -133,6 +147,7 @@ figcaption {{ color:var(--muted); font-size:14px; text-align:center; margin-top:
 .info td {{ padding:4px 0; }}
 .check {{ background:var(--warn); border:1px solid var(--warn-line); border-radius:6px; padding:12px 16px; font-size:15px; }}
 .check ul, details ul {{ margin:6px 0 0; padding-left:20px; }}
+.place {{ border:1px dashed var(--accent); border-radius:6px; padding:12px 14px; font-size:15px; color:var(--muted); }}
 .tags {{ color:var(--accent); margin-top:24px; word-break:keep-all; }}
 details {{ color:var(--muted); font-size:15px; margin-top:8px; }}
 </style></head>
