@@ -1,0 +1,11 @@
+# 비밀 값
+.env
+
+# 개인 방문 기록과 사진 (이 저장소는 공개 저장소입니다)
+visits/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
