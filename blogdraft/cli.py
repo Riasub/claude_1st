@@ -102,7 +102,7 @@ def cmd_build(args) -> int:
     return _finish(folder, post, visit, place_info)
 
 
-def cmd_import_notion(args) -> int:
+def cmd_import(args) -> int:
     spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
     folder = notion.import_visit(spec, Path(args.root))
     print(folder)
@@ -159,10 +159,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--refresh-place", action="store_true", help="네이버 가게 정보 다시 검색")
     p.set_defaults(func=cmd_build)
 
-    p = sub.add_parser("import-notion", help="노션 페이지 정보(JSON)로 방문 폴더 만들기")
-    p.add_argument("spec", help="노션 페이지 정보 JSON 파일 (형식은 blogdraft/notion.py 참고)")
+    p = sub.add_parser("import", help="방문 정보(JSON)와 사진 경로로 방문 폴더 만들기 (채팅·노션용)")
+    p.add_argument("spec", help="방문 정보 JSON 파일 (형식은 blogdraft/notion.py의 import_visit 참고)")
     p.add_argument("--root", default=str(REPO_ROOT / "visits"), help="방문 폴더를 만들 위치")
-    p.set_defaults(func=cmd_import_notion)
+    p.set_defaults(func=cmd_import)
 
     p = sub.add_parser("render", help="post.json을 고친 뒤 미리보기 다시 만들기")
     p.add_argument("folder", help="방문 폴더")

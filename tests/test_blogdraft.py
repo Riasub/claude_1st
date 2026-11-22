@@ -197,7 +197,7 @@ def test_import_notion_build_render_writes_notion_markdown(tmp_path, monkeypatch
     spec_path = tmp_path / "spec.json"
     spec_path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     root = tmp_path / "visits"
-    assert cli.main(["import-notion", str(spec_path), "--root", str(root)]) == 0
+    assert cli.main(["import", str(spec_path), "--root", str(root)]) == 0
     folder = next(root.iterdir())
     assert folder.name.endswith("34567890")
     visit = load_visit(folder)

@@ -81,7 +81,7 @@ def import_visit(spec: dict[str, Any], root: Path) -> Path:
         "photos": captions,
     }
     (folder / VISIT_FILE).write_text(
-        "# 노션에서 가져온 방문 기록 (import-notion이 만든 파일)\n"
+        "# 노션에서 가져온 방문 기록 (blogdraft import가 만든 파일)\n"
         + yaml.safe_dump(visit, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
