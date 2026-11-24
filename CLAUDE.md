@@ -30,6 +30,7 @@
    ```
    - 사진 순서는 첨부 순서. 날짜를 말하지 않았으면 `date`를 비워 둔다(첫 사진의 촬영 날짜가 들어가고, 없으면 빈 칸). 사진마다 촬영 날짜가 크게 다르면 확인할 점에 남긴다.
    - 가게 이름이 없으면 먼저 물어본다. 협찬 여부를 말하지 않았으면 `false`.
+   - 사용자가 말한 경우에만 `"waiting"`(웨이팅·예약 방법), `"parking"`, `"with"`(누구와), `"purpose"`를 넣는다. 웨이팅·주차는 가게 정보 칸에 들어간다.
 2. **초안 쓰기:** `python -m blogdraft build <방문 폴더> --no-ai` → `draft/prompt.md`를 읽고 `draft/photos/NN.jpg`를 모두 열어 본다.
    규칙·스타일(`style.md`)·스키마대로 `draft/post.json`을 쓴다. 사용자가 말하지 않은 사실(가격, 메뉴 이름, 맛 평가, 영업시간)은 지어내지 않고, 사진만 보고 짐작한 것은 `check`에 넣는다.
 3. **렌더링:** `python -m blogdraft render <방문 폴더>` → `draft/post.txt`, `draft/tags.txt`, `draft/notion.md`, `draft/paste.html` 생성.

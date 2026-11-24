@@ -338,3 +338,12 @@ def test_naver_get_retries_after_reset(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", flaky)
     assert placeinfo._get("https://m.search.naver.com/x") == "ok" and calls["n"] == 3
+
+
+def test_import_passes_waiting_to_store_info(tmp_path):
+    from blogdraft import notion
+
+    folder = notion.import_visit({"name": "오미영피자", "date": "2026-10-01", "naver_search": False,
+                                  "waiting": "캐치테이블 웨이팅 가능"}, tmp_path)
+    visit = load_visit(folder)
+    assert dict(render.info_lines(visit, None))["웨이팅"] == "캐치테이블 웨이팅 가능"
