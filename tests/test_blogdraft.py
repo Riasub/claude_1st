@@ -306,3 +306,35 @@ def test_official_menu_reaches_prompt_and_store_info(visit_dir):
     rows = dict(render.info_lines(visit, info))
     assert rows["전화"] == "041-424-4565"
     assert rows["네이버 지도"].endswith("/2031983709")
+
+
+def test_import_uses_photo_date_when_date_missing(tmp_path):
+    from blogdraft import notion
+
+    make_photo(tmp_path / "p.jpg", taken="2026:10:01 19:07:30")
+    folder = notion.import_visit({"name": "오미영피자", "naver_search": False,
+                                  "photos": [{"path": str(tmp_path / "p.jpg")}]}, tmp_path / "visits")
+    assert folder.name.startswith("2026-10-01-")
+    assert load_visit(folder)["visit"]["date"] == "2026-10-01"
+
+
+def test_naver_get_retries_after_reset(monkeypatch):
+    import urllib.request
+    from blogdraft import placeinfo
+
+    monkeypatch.undo()  # no_network 픽스처 해제: 여기서는 urlopen만 가짜로 바꾼다
+    monkeypatch.setattr(placeinfo.time, "sleep", lambda s: None)
+    calls = {"n": 0}
+
+    class Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def flaky(req, timeout):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise urllib.error.URLError(ConnectionResetError(104, "reset"))
+        return Resp("ok".encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", flaky)
+    assert placeinfo._get("https://m.search.naver.com/x") == "ok" and calls["n"] == 3

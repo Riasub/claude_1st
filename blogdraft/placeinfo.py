@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,17 +30,22 @@ class PlaceError(Exception):
     pass
 
 
-def _get(url: str, referer: str = "https://m.search.naver.com/", timeout: float = 15.0) -> str:
+def _get(url: str, referer: str = "https://m.search.naver.com/", timeout: float = 15.0, attempts: int = 3) -> str:
+    """연결이 끊기면(처음 몇 번 끊기는 경우가 있음) 잠깐 쉬고 다시 시도한다."""
     req = urllib.request.Request(
         url, headers={"User-Agent": UA, "Accept-Language": "ko-KR,ko;q=0.9", "Referer": referer}
     )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        raise PlaceError(f"네이버 페이지를 열지 못했어요 (HTTP {e.code}).") from e
-    except (urllib.error.URLError, TimeoutError) as e:
-        raise PlaceError(f"네이버에 연결하지 못했어요: {e}") from e
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            raise PlaceError(f"네이버 페이지를 열지 못했어요 (HTTP {e.code}).") from e
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            if attempt == attempts:
+                raise PlaceError(f"네이버에 연결하지 못했어요: {e}") from e
+            time.sleep(1.5 * attempt)
+    raise PlaceError("네이버에 연결하지 못했어요.")  # pragma: no cover
 
 
 def _norm(s: str) -> str:

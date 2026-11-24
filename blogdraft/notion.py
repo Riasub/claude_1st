@@ -35,6 +35,18 @@ def parse_menus(text: str) -> list[dict[str, Any]]:
     return menus
 
 
+def _photo_date(photos: list[dict[str, Any]]) -> str:
+    """방문일이 없으면 첫 사진의 촬영 날짜(EXIF)를 쓴다. 없으면 빈 문자열."""
+    from .photos import _taken_at
+
+    for item in photos:
+        taken = _taken_at(Path(item["path"]))
+        m = re.match(r"(\d{4}):(\d{2}):(\d{2})", taken)
+        if m:
+            return "-".join(m.groups())
+    return ""
+
+
 def import_visit(spec: dict[str, Any], root: Path) -> Path:
     """노션 페이지 정보로 방문 폴더를 만든다 (같은 페이지면 같은 폴더를 다시 씀).
 
@@ -46,7 +58,7 @@ def import_visit(spec: dict[str, Any], root: Path) -> Path:
     name = (spec.get("name") or "").strip()
     if not name:
         raise VisitError("노션 페이지에 가게 이름이 없어요.")
-    date = (spec.get("date") or "").strip()
+    date = (spec.get("date") or "").strip() or _photo_date(spec.get("photos") or [])
     page_key = re.sub(r"[^0-9a-f]", "", (spec.get("page_url") or "").lower())[-8:]
     folder = root / "-".join(x for x in (date, slugify(name), page_key) if x)
     photo_dir = folder / PHOTO_DIR
