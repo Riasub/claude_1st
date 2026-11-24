@@ -97,8 +97,16 @@ def parse_place(text: str, place_id: str) -> dict[str, Any]:
                 "description": (v.get("description") or "").strip(),
             }
         )
+    stats = next((v for v in st.values() if isinstance(v, dict) and v.get("__typename") == "VisitorReviewStatsResult"), {})
+    themes = ((stats.get("analysis") or {}).get("themes")) or []
     return {
         "source": "naver_place",
+        "conveniences": list(base.get("conveniences") or []),
+        "micro_reviews": list(base.get("microReviews") or []),
+        "review_total": ((stats.get("review") or {}).get("totalCount")) or base.get("visitorReviewsTotal") or 0,
+        "review_themes": [{"label": x.get("label"), "count": x.get("count")} for x in themes[:5] if x.get("label")],
+        "blog_titles": [v.get("title") for v in st.values()
+                        if isinstance(v, dict) and v.get("__typename") == "FsasReview" and v.get("title")][:5],
         "place_id": place_id,
         "name": base.get("name", ""),
         "category": base.get("category", ""),

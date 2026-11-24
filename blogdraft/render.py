@@ -46,6 +46,8 @@ def info_lines(visit: dict[str, Any], place_info: dict[str, Any] | None) -> list
     ]
     if menus:
         rows.append(("메뉴", ", ".join(menus)))
+    if found.get("conveniences"):
+        rows.append(("편의시설", ", ".join(found["conveniences"])))
     if found.get("link"):
         rows.append(("네이버 지도", found["link"]))
     return [(k, str(val)) for k, val in rows if str(val).strip()]
@@ -104,7 +106,7 @@ def preview_html(post: dict[str, Any], visit, place_info) -> str:
         elif b["kind"] == "heading":
             body.append(f"<h2>{_e(b['text'])}</h2>")
         else:
-            body.append(f"<p>{_e(b['text'])}</p>")
+            body.append(f"<p>{_e(b['text']).replace(chr(10), '<br>')}</p>")
     info = info_lines(visit, place_info)
     if info:
         rows = "".join(f"<tr><th>{_e(k)}</th><td>{_e(v)}</td></tr>" for k, v in info)

@@ -347,3 +347,19 @@ def test_import_passes_waiting_to_store_info(tmp_path):
                                   "waiting": "캐치테이블 웨이팅 가능"}, tmp_path)
     visit = load_visit(folder)
     assert dict(render.info_lines(visit, None))["웨이팅"] == "캐치테이블 웨이팅 가능"
+
+
+def test_place_public_info_reaches_prompt_and_store_info(visit_dir):
+    from blogdraft import placeinfo
+
+    page = PLACE_PAGE.replace('"phone": "041-424-4565"}',
+        '"phone": "041-424-4565", "conveniences": ["예약", "주차"], "microReviews": ["한줄 소개"]},\n'
+        '"VisitorReviewStatsResult:1": {"__typename": "VisitorReviewStatsResult", "review": {"totalCount": 330},'
+        ' "analysis": {"themes": [{"label": "맛", "count": 128}]}},\n'
+        '"FsasReview:x": {"__typename": "FsasReview", "title": "다른 블로그 제목"}')
+    info = placeinfo.parse_place(page, "1")
+    assert info["conveniences"] == ["예약", "주차"] and info["review_total"] == 330
+    assert info["review_themes"] == [{"label": "맛", "count": 128}] and info["blog_titles"] == ["다른 블로그 제목"]
+    facts = writer.facts_text(load_visit(visit_dir), info)
+    assert "네이버 공개 정보" in facts and "참고만" in facts
+    assert dict(render.info_lines(load_visit(visit_dir), info))["편의시설"] == "예약, 주차"

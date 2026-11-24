@@ -40,7 +40,7 @@ def article_html(post: dict[str, Any], visit, place_info, photo_dir: Path) -> st
         elif b["kind"] == "heading":
             out.append(f"<p><b>▶ {_e(b['text'])}</b></p>")
         else:
-            out.append(f"<p>{_e(b['text'])}</p>")
+            out.append(f"<p>{_e(b['text']).replace(chr(10), '<br>')}</p>")
         out.append("<p><br></p>")
     info = info_lines(visit, place_info)
     if info:

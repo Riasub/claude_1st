@@ -56,6 +56,8 @@ RULES = """\
   어느 메뉴인지 확실하지 않으면(예: 같은 종류가 여러 개) 단정하지 말고 check에 확인 요청을 남깁니다.
   가격이 범위(예: 7,000~24,000원)로만 나와 있으면 글쓴이가 먹은 양의 가격을 지어내지 않습니다.
 - 메뉴판의 설명은 가게가 쓴 소개이므로, 쓸 때는 맛 평가가 아니라 메뉴 구성 정보로만 씁니다.
+- 네이버 공개 정보(편의시설, 리뷰 수와 주제 통계)는 "네이버 기준"처럼 출처를 밝혀 쓸 수 있습니다. 숫자는 그대로 옮깁니다.
+- 다른 사람의 후기 문장이나 표현을 베끼지 않습니다(표절, 네이버 유사 문서 불이익). 제목 목록은 어떤 점이 관심을 끄는지 참고만 합니다.
 
 형식에 관한 규칙:
 - 주소, 영업시간, 전화번호 정보 칸과 협찬 표시 문구는 프로그램이 따로 넣으니 본문에 쓰지 않습니다.
@@ -85,6 +87,17 @@ def facts_text(visit: dict[str, Any], place_info: dict[str, Any] | None) -> str:
         data["네이버 가게 정보 (공식)"] = {
             k: place_info[k] for k in ("name", "category") if place_info.get(k)
         }
+        public = {
+            "편의시설": place_info.get("conveniences"),
+            "가게 한줄 소개": place_info.get("micro_reviews"),
+            "방문자 리뷰 수": place_info.get("review_total"),
+            "방문자 리뷰 주제별 언급 수": place_info.get("review_themes"),
+        }
+        public = {k: v for k, v in public.items() if v}
+        if public:
+            data["네이버 공개 정보 (인용할 때 '네이버 기준'처럼 출처를 밝힘)"] = public
+        if place_info.get("blog_titles"):
+            data["다른 블로그 후기 제목 (어떤 점을 강조하는지 참고만. 문장을 가져오지 않음)"] = place_info["blog_titles"]
         if place_info.get("menus"):
             data["네이버 메뉴판 (공식, 메뉴 이름·가격은 이 표기를 따름)"] = [
                 {k: m[k] for k in ("name", "price", "description") if m.get(k)} for m in place_info["menus"]
