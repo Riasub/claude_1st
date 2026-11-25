@@ -86,6 +86,7 @@ def import_visit(spec: dict[str, Any], root: Path) -> Path:
             "address": spec.get("address") or "",
             "naver_search": spec.get("naver_search", True),
             "search_query": spec.get("search_query") or "",
+            "hours": spec.get("hours") or "",
         },
         "visit": {"date": date, **{k: spec[k] for k in ("with", "purpose", "waiting", "parking") if spec.get(k)}},
         "sponsored": bool(spec.get("sponsored")),
