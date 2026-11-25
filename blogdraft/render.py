@@ -72,7 +72,7 @@ def post_text(post: dict[str, Any], visit, place_info) -> str:
             if b["text"]:
                 parts.append(b["text"])
         elif b["kind"] == "heading":
-            parts.append(f"▶ {b['text']}")
+            parts.append(b["text"])
         else:
             parts.append(b["text"])
         parts.append("")

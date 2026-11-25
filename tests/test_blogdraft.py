@@ -261,7 +261,7 @@ def test_paste_page_embeds_photos_in_order(visit_dir, tmp_path):
     assert "<html" not in page and "<body" not in page
     assert page.count('src="data:image/jpeg;base64,') == 3
     body = page[page.index('<div id="article">'):]
-    assert body.index("▶ 분위기") < body.index('alt="사진 2"') < body.index('alt="사진 1"')
+    assert body.index("<b>분위기</b>") < body.index('alt="사진 2"') < body.index('alt="사진 1"')
     assert "[📍 장소: " in body and "확인 &lt;1&gt;" in page
 
 
