@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import naver, notion, paste, photos as photo_mod, placeinfo, render, writer
+from . import keywords as kw, naver, notion, paste, photos as photo_mod, placeinfo, render, writer
 from .visit import DRAFT_DIR, PHOTO_DIR, VisitError, create_visit, load_visit
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -114,7 +114,12 @@ def cmd_build(args) -> int:
     if not use_ai:
         prompt = draft / "prompt.md"
         prompt.write_text(
-            writer.prompt_markdown(system, visit, place_info, photos, draft / "post.json"), encoding="utf-8"
+            writer.prompt_markdown(
+                system, visit, place_info, photos, draft / "post.json",
+                keywords=_load_json(draft / "keywords.json"),
+                recent=writer.recent_posts(folder.parent, folder),
+            ),
+            encoding="utf-8",
         )
         print(f"작성 요청서를 만들었어요: {prompt}")
         print("Claude Code 세션에서 \"이 방문 초안 써줘\"라고 하면 이 파일대로 초안을 씁니다.")
@@ -124,6 +129,32 @@ def cmd_build(args) -> int:
     content = writer.user_content(visit, place_info, photos, with_images=not args.no_images)
     post = writer.normalize_post(writer.write_with_claude(system, content), len(photos))
     return _finish(folder, post, visit, place_info)
+
+
+def _load_json(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def cmd_keywords(args) -> int:
+    folder = Path(args.folder)
+    visit = load_visit(folder)
+    place = visit["place"]
+    foods = args.food or [place.get("type", "맛집")]
+    result = kw.research(place.get("area", ""), place["name"], foods)
+    draft = folder / DRAFT_DIR
+    draft.mkdir(exist_ok=True)
+    (draft / "keywords.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    for q, items in result["suggestions"].items():
+        print(f"· {q}: {', '.join(items) or '(없음)'}")
+    for title in result["blog_titles"]:
+        print(f"  - {title}")
+    for err in result["errors"]:
+        print(f"· 실패: {err}")
+    print(f"저장: {draft / 'keywords.json'} (다음 build 때 초안 요청서에 들어가요)")
+    return 0
 
 
 def cmd_import(args) -> int:
@@ -188,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("spec", help="방문 정보 JSON 파일 (형식은 blogdraft/notion.py의 import_visit 참고)")
     p.add_argument("--root", default=str(REPO_ROOT / "visits"), help="방문 폴더를 만들 위치")
     p.set_defaults(func=cmd_import)
+
+    p = sub.add_parser("keywords", help="네이버 자동완성·검색 결과로 검색어 조사 (draft/keywords.json)")
+    p.add_argument("folder", help="방문 폴더")
+    p.add_argument("--food", action="append", help="음식·가게 종류 (여러 번 가능, 예: --food 타코야끼 --food 술집)")
+    p.set_defaults(func=cmd_keywords)
 
     p = sub.add_parser("place", help="네이버 플레이스에서 가게 주소·전화·메뉴판 조회")
     p.add_argument("name", help="가게 이름")

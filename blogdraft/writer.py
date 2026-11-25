@@ -57,6 +57,7 @@ RULES = """\
   가격이 범위(예: 7,000~24,000원)로만 나와 있으면 글쓴이가 먹은 양의 가격을 지어내지 않습니다.
 - 메뉴판의 설명은 가게가 쓴 소개이므로, 쓸 때는 맛 평가가 아니라 메뉴 구성 정보로만 씁니다.
 - 네이버 공개 정보(편의시설, 리뷰 수와 주제 통계)는 "네이버 기준"처럼 출처를 밝혀 쓸 수 있습니다. 숫자는 그대로 옮깁니다.
+- 검색어 참고가 있으면 제목 '|' 뒤·첫 문단·태그에 자연스럽게 쓰고, '최근 글에서 이미 쓴 표현'과 소제목·첫 문장·끝맺음이 겹치지 않게 씁니다.
 - 다른 사람의 후기 문장이나 표현을 베끼지 않습니다(표절, 네이버 유사 문서 불이익). 제목 목록은 어떤 점이 관심을 끄는지 참고만 합니다.
 
 형식에 관한 규칙:
@@ -199,9 +200,55 @@ def write_with_claude(system: str, content: list[dict]) -> dict[str, Any]:
         raise WriterError(f"초안 형식을 읽지 못했어요 (request id: {response._request_id}).") from e
 
 
-def prompt_markdown(system: str, visit, place_info, photos: list[Photo], post_path: Path) -> str:
+def keywords_section(keywords: dict[str, Any] | None) -> str:
+    if not keywords or not (keywords.get("suggestions") or keywords.get("blog_titles")):
+        return ""
+    lines = ["## 검색어 참고 (네이버 자동완성 · 검색 결과 블로그 제목)", "",
+             "제목 뒤 검색어, 첫 문단, 태그에 실제로 많이 찾는 말을 자연스럽게 넣으세요. 같은 말을 억지로 반복하지 않습니다.",
+             "다른 블로그 제목은 검색어 조합만 참고하고 문장은 가져오지 않습니다.", ""]
+    for q, items in (keywords.get("suggestions") or {}).items():
+        if items:
+            lines.append(f"- `{q}` 자동완성: {', '.join(items)}")
+    if keywords.get("blog_titles"):
+        lines += ["", "검색 결과 블로그 제목:"] + [f"- {t}" for t in keywords["blog_titles"]]
+    return "\n".join(lines) + "\n"
+
+
+def recent_section(recent: list[dict[str, Any]] | None) -> str:
+    if not recent:
+        return ""
+    lines = ["## 최근 글에서 이미 쓴 표현 (반복하지 말 것)", "",
+             "같은 틀이 반복되면 네이버에서 비슷한 글로 보고 노출이 줄 수 있어요. 소제목 이름, 첫 문장, 끝맺음을 이 글들과 다르게 쓰세요.", ""]
+    for r in recent:
+        lines.append(f"- {r['title']}: 첫 문장 「{r['first']}」 / 소제목 {', '.join(r['headings'])} / 끝 문장 「{r['last']}」")
+    return "\n".join(lines) + "\n"
+
+
+def recent_posts(visits_root: Path, exclude: Path, limit: int = 5) -> list[dict[str, Any]]:
+    """다른 방문 폴더의 post.json에서 제목·첫 문장·소제목·끝 문장을 모은다."""
+    out = []
+    for post_path in sorted(visits_root.glob("*/draft/post.json"), reverse=True):
+        if post_path.parent.parent.resolve() == exclude.resolve():
+            continue
+        try:
+            post = json.loads(post_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        texts = [b.get("text", "") for b in post.get("blocks", []) if b.get("kind") == "text" and b.get("text")]
+        out.append({
+            "title": post.get("title", ""),
+            "first": texts[0][:60] if texts else "",
+            "last": texts[-1][:60] if texts else "",
+            "headings": [b["text"] for b in post.get("blocks", []) if b.get("kind") == "heading"],
+        })
+    return out[:limit]
+
+
+def prompt_markdown(system: str, visit, place_info, photos: list[Photo], post_path: Path,
+                    keywords: dict[str, Any] | None = None, recent: list[dict[str, Any]] | None = None) -> str:
     """API 키 없이 Claude Code 세션에서 초안을 쓰도록 넘기는 지시문."""
     photo_lines = "\n".join(f"- {photo_label(p)} 파일: `{p.output}`" for p in photos) or "- (사진 없음)"
+    extra = "\n".join(s for s in (keywords_section(keywords), recent_section(recent)) if s)
     return f"""# 후기 초안 작성 요청
 
 이 파일은 `python -m blogdraft build --no-ai`가 만들었습니다.
@@ -222,6 +269,7 @@ Claude Code 세션이라면: 아래 사진 파일을 모두 열어 본 뒤, 규�
 
 {photo_lines}
 
+{extra}
 ## 출력 JSON 스키마
 
 ```json

@@ -363,3 +363,29 @@ def test_place_public_info_reaches_prompt_and_store_info(visit_dir):
     facts = writer.facts_text(load_visit(visit_dir), info)
     assert "네이버 공개 정보" in facts and "참고만" in facts
     assert dict(render.info_lines(load_visit(visit_dir), info))["편의시설"] == "예약, 주차"
+
+
+def test_keywords_research_and_prompt_sections(monkeypatch, tmp_path, visit_dir):
+    from blogdraft import keywords, placeinfo
+
+    pages = {
+        "ac": json.dumps({"items": [[["탕정 타코야끼"], ["탕정 타코야끼 맛집"]]]}),
+        "search": '<a href="https://m.blog.naver.com/x/1" class="t">[탕정] 타코의밤 타코야끼 후기</a>'
+                  '<a href="https://m.blog.naver.com/y">블로그이름</a>',
+    }
+    monkeypatch.setattr(placeinfo, "_get", lambda url, **kw: pages["ac" if "ac.search" in url else "search"])
+    monkeypatch.setattr(keywords, "_get", lambda url, **kw: pages["ac" if "ac.search" in url else "search"])
+    r = keywords.research("탕정", "타코의밤", ["타코야끼"])
+    assert r["suggestions"]["탕정 타코야끼"] == ["탕정 타코야끼", "탕정 타코야끼 맛집"]
+    assert r["blog_titles"] == ["[탕정] 타코의밤 타코야끼 후기"]
+
+    other = tmp_path / "visits" / "2026-01-01-다른집" / "draft"
+    other.mkdir(parents=True)
+    (other / "post.json").write_text(json.dumps({"title": "[A] 다른집 후기", "blocks": [
+        {"kind": "text", "text": "첫 문장이에요"}, {"kind": "heading", "text": "📌 한눈에 보기"},
+        {"kind": "text", "text": "끝 문장이에요"}]}, ensure_ascii=False), encoding="utf-8")
+    recent = writer.recent_posts(tmp_path / "visits", tmp_path / "visits" / "현재")
+    assert recent == [{"title": "[A] 다른집 후기", "first": "첫 문장이에요", "last": "끝 문장이에요",
+                       "headings": ["📌 한눈에 보기"]}]
+    md = writer.prompt_markdown("규칙", load_visit(visit_dir), None, [], tmp_path / "post.json", keywords=r, recent=recent)
+    assert "탕정 타코야끼 맛집" in md and "이미 쓴 표현" in md and "📌 한눈에 보기" in md
